@@ -2,49 +2,49 @@
 Definition of views.
 """
 
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.http import HttpRequest
 from django.template import RequestContext
 from datetime import datetime
+from django.http import HttpResponse, HttpResponseRedirect
+from django.template import loader
+from django.views import generic
+from django.core.urlresolvers import reverse
 
-def home(request):
-    """Renders the home page."""
-    assert isinstance(request, HttpRequest)
-    return render(
-        request,
-        'app/index.html',
-        context_instance = RequestContext(request,
-        {
-            'title':'Home Page',
-            'year':datetime.now().year,
+from .models import Question
+
+class IndexView(generic.ListView):
+    template_name = 'app/index.html'
+    context_object_name = 'latest_question_list'
+
+    def get_queryset(self):
+        """Return the last five published questions."""
+        return Question.objects.order_by('-pub_date')[:5]
+
+
+class DetailView(generic.DetailView):
+    model = Question
+    template_name = 'app/detail.html'
+
+
+class ResultsView(generic.DetailView):
+    model = Question
+    template_name = 'app/results.html'
+
+def vote(request, question_id):
+    question = get_object_or_404(Question, pk=question_id)
+    try:
+        selected_choice = question.choice_set.get(pk=request.POST['choice'])
+    except (KeyError, Choice.DoesNotExist):
+        # Redisplay the question voting form.
+        return render(request, 'app/detail.html', {
+            'question': question,
+            'error_message': "You didn't select a choice.",
         })
-    )
-
-def contact(request):
-    """Renders the contact page."""
-    assert isinstance(request, HttpRequest)
-    return render(
-        request,
-        'app/contact.html',
-        context_instance = RequestContext(request,
-        {
-            'title':'Contact',
-            'message':'Your contact page.',
-            'year':datetime.now().year,
-        })
-    )
-
-def about(request):
-    """Renders the about page."""
-    assert isinstance(request, HttpRequest)
-    return render(
-        request,
-        'app/about.html',
-        context_instance = RequestContext(request,
-        {
-            'title':'About',
-            'message':'Your application description page.',
-            'year':datetime.now().year,
-        })
-    )
-
+    else:
+        selected_choice.votes += 1
+        selected_choice.save()
+        # Always return an HttpResponseRedirect after successfully dealing
+        # with POST data. This prevents data from being posted twice if a
+        # user hits the Back button.
+        return HttpResponseRedirect(reverse('app:results', args=(question.id,)))
